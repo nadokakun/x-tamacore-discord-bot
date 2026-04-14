@@ -2,14 +2,14 @@ name: X to Discord Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # 每 30 分鐘執行一次
-  workflow_dispatch:           # 允許手動觸發（測試用）
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # 需要寫入權限以更新 last_tweet_id.json
+      contents: write
 
     steps:
       - name: Checkout
@@ -26,15 +26,14 @@ jobs:
 
       - name: Run bot
         env:
-          X_BEARER_TOKEN:     ${{ secrets.X_BEARER_TOKEN }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python bot.py
 
       - name: Save state
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add last_tweet_id.json
           git diff --staged --quiet || git commit -m "chore: update last tweet id"
           git push
-
