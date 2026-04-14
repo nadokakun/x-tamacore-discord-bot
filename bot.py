@@ -17,8 +17,15 @@ except ImportError:
 # ── 設定 ──────────────────────────────────────────────────
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL")
 TARGET_USERNAME = "tamacolle_staff"
-RSS_URL         = f"https://rsshub.app/twitter/user/{TARGET_USERNAME}"
 STATE_FILE      = "last_tweet_id.json"
+
+# RSS 來源（依序嘗試，成功即停止）
+RSS_SOURCES = [
+    f"https://nitter.privacydev.net/{TARGET_USERNAME}/rss",
+    f"https://nitter.poast.org/{TARGET_USERNAME}/rss",
+    f"https://nitter.net/{TARGET_USERNAME}/rss",
+    f"https://rsshub.app/twitter/user/{TARGET_USERNAME}",
+]
 # ──────────────────────────────────────────────────────────
 
 translator = GoogleTranslator(source="auto", target="zh-TW")
@@ -37,10 +44,14 @@ def save_last_id(entry_id: str):
 
 
 def fetch_entries():
-    feed = feedparser.parse(RSS_URL)
-    if feed.bozo and not feed.entries:
-        raise RuntimeError(f"RSS 解析失敗: {feed.bozo_exception}")
-    return feed.entries
+    for url in RSS_SOURCES:
+        print(f"  嘗試: {url}")
+        feed = feedparser.parse(url)
+        if feed.entries:
+            print(f"  成功取得 {len(feed.entries)} 則推文")
+            return feed.entries
+        print(f"  失敗: {getattr(feed, 'bozo_exception', '無回應')}")
+    raise RuntimeError("所有 RSS 來源均無法取得資料")
 
 
 def strip_html(text: str) -> str:
