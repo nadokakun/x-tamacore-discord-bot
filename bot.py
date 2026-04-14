@@ -1,8 +1,9 @@
 import os
+import re
 import json
 import time
 import requests
-import tweepy
+import feedparser
 from deep_translator import GoogleTranslator
 from datetime import datetime, timezone
 
@@ -14,13 +15,12 @@ except ImportError:
     pass
 
 # ── 設定 ──────────────────────────────────────────────────
-BEARER_TOKEN    = os.getenv("X_BEARER_TOKEN")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL")
 TARGET_USERNAME = "tamacolle_staff"
+RSS_URL         = f"https://rsshub.app/twitter/user/{TARGET_USERNAME}"
 STATE_FILE      = "last_tweet_id.json"
 # ──────────────────────────────────────────────────────────
 
-client     = tweepy.Client(bearer_token=BEARER_TOKEN)
 translator = GoogleTranslator(source="auto", target="zh-TW")
 
 
@@ -31,25 +31,20 @@ def load_last_id() -> str | None:
     return None
 
 
-def save_last_id(tweet_id: str):
+def save_last_id(entry_id: str):
     with open(STATE_FILE, "w") as f:
-        json.dump({"last_tweet_id": str(tweet_id)}, f)
+        json.dump({"last_tweet_id": entry_id}, f)
 
 
-def get_user_id(username: str) -> str:
-    return client.get_user(username=username).data.id
+def fetch_entries():
+    feed = feedparser.parse(RSS_URL)
+    if feed.bozo and not feed.entries:
+        raise RuntimeError(f"RSS 解析失敗: {feed.bozo_exception}")
+    return feed.entries
 
 
-def fetch_new_tweets(user_id: str, since_id: str | None = None):
-    kwargs = dict(
-        max_results=10,
-        tweet_fields=["created_at", "text"],
-        exclude=["retweets", "replies"],
-    )
-    if since_id:
-        kwargs["since_id"] = since_id
-    resp = client.get_users_tweets(user_id, **kwargs)
-    return resp.data or []
+def strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def translate(text: str) -> str:
@@ -60,8 +55,7 @@ def translate(text: str) -> str:
         return text
 
 
-def send_to_discord(original: str, translated: str, tweet_id: str):
-    url = f"https://x.com/{TARGET_USERNAME}/status/{tweet_id}"
+def send_to_discord(original: str, translated: str, link: str):
     payload = {
         "embeds": [{
             "author": {
@@ -70,17 +64,17 @@ def send_to_discord(original: str, translated: str, tweet_id: str):
             },
             "color": 0x1D9BF0,
             "fields": [
-                {"name": "原文",     "value": original,   "inline": False},
-                {"name": "繁體中文", "value": translated,  "inline": False},
+                {"name": "原文",     "value": original[:1024],   "inline": False},
+                {"name": "繁體中文", "value": translated[:1024],  "inline": False},
             ],
             "footer":    {"text": "X → Discord Bot"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "url":       url,
+            "url":       link,
         }]
     }
     r = requests.post(DISCORD_WEBHOOK, json=payload, timeout=10)
     if r.status_code == 204:
-        print(f"  ✓ 已發送 tweet {tweet_id}")
+        print(f"  ✓ 已發送: {link}")
     else:
         print(f"  ✗ Discord 錯誤 {r.status_code}: {r.text}")
 
@@ -88,32 +82,39 @@ def send_to_discord(original: str, translated: str, tweet_id: str):
 def main():
     print(f"執行時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    user_id = get_user_id(TARGET_USERNAME)
+    entries = fetch_entries()
+    if not entries:
+        print("沒有取得任何推文")
+        return
+
     last_id = load_last_id()
 
     # 首次執行：只記錄最新 ID，不發送
     if last_id is None:
-        tweets = fetch_new_tweets(user_id)
-        if tweets:
-            save_last_id(tweets[0].id)
-            print(f"首次執行，記錄最新推文 ID: {tweets[0].id}（不發送）")
-        else:
-            print("目前沒有推文")
+        save_last_id(entries[0].id)
+        print(f"首次執行，記錄最新推文（不發送）")
         return
 
-    tweets = fetch_new_tweets(user_id, since_id=last_id)
+    # 找出比上次更新的新推文
+    new_entries = []
+    for entry in entries:
+        if entry.id == last_id:
+            break
+        new_entries.append(entry)
 
-    if not tweets:
+    if not new_entries:
         print("沒有新推文")
         return
 
     # 由舊到新處理
-    for tweet in reversed(tweets):
-        send_to_discord(tweet.text, translate(tweet.text), str(tweet.id))
+    for entry in reversed(new_entries):
+        text       = strip_html(entry.summary)
+        translated = translate(text)
+        send_to_discord(text, translated, entry.link)
         time.sleep(1)
 
-    save_last_id(tweets[0].id)
-    print(f"共處理 {len(tweets)} 則推文")
+    save_last_id(entries[0].id)
+    print(f"共處理 {len(new_entries)} 則推文")
 
 
 if __name__ == "__main__":
