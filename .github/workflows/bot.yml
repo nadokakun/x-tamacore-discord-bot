@@ -2,8 +2,8 @@ name: X to Discord Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
+    - cron: '*/30 * * * *'   # 每 30 分鐘執行一次
+  workflow_dispatch:           # 允許手動觸發
 
 jobs:
   run-bot:
@@ -26,7 +26,6 @@ jobs:
 
       - name: Run bot
         env:
-          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python bot.py
 
