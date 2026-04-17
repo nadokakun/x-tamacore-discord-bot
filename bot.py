@@ -21,10 +21,25 @@ STATE_FILE      = "last_tweet_id.json"
 
 # RSS 來源（依序嘗試，成功即停止）
 RSS_SOURCES = [
+    # Nitter 公開實例
     f"https://nitter.privacydev.net/{TARGET_USERNAME}/rss",
     f"https://nitter.poast.org/{TARGET_USERNAME}/rss",
     f"https://nitter.net/{TARGET_USERNAME}/rss",
+    f"https://nitter.1d4.us/{TARGET_USERNAME}/rss",
+    f"https://nitter.kavin.rocks/{TARGET_USERNAME}/rss",
+    f"https://nitter.unixfox.eu/{TARGET_USERNAME}/rss",
+    f"https://nitter.moomoo.me/{TARGET_USERNAME}/rss",
+    f"https://nitter.it/{TARGET_USERNAME}/rss",
+    f"https://nitter.tiekoetter.com/{TARGET_USERNAME}/rss",
+    f"https://nitter.esmailelbob.xyz/{TARGET_USERNAME}/rss",
+    f"https://nitter.pussthecat.org/{TARGET_USERNAME}/rss",
+    f"https://nitter.fdn.fr/{TARGET_USERNAME}/rss",
+    f"https://twiiit.com/{TARGET_USERNAME}/rss",
+    # RSSHub 公開實例
     f"https://rsshub.app/twitter/user/{TARGET_USERNAME}",
+    f"https://rsshub.rssforever.com/twitter/user/{TARGET_USERNAME}",
+    f"https://rsshub.feeded.app/twitter/user/{TARGET_USERNAME}",
+    f"https://hub.slarker.me/twitter/user/{TARGET_USERNAME}",
 ]
 # ──────────────────────────────────────────────────────────
 
