@@ -73,6 +73,32 @@ def strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
+def extract_image(entry) -> str | None:
+    """從 RSS entry 擷取第一張圖片 URL"""
+    # 方法 1：feedparser media_content
+    if hasattr(entry, "media_content"):
+        for media in entry.media_content:
+            if media.get("medium") == "image" or media.get("url", "").endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+                return media["url"]
+
+    # 方法 2：feedparser media_thumbnail
+    if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
+        return entry.media_thumbnail[0].get("url")
+
+    # 方法 3：從 summary HTML 的 <img> 標籤抓
+    if hasattr(entry, "summary"):
+        match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', entry.summary)
+        if match:
+            img_url = match.group(1)
+            # 把 nitter 圖片轉換成 Twitter 原始 URL
+            if "/pic/media%2F" in img_url or "/pic/enc/" in img_url:
+                decoded = requests.utils.unquote(img_url.split("/pic/")[-1])
+                return f"https://pbs.twimg.com/{decoded}"
+            return img_url
+
+    return None
+
+
 def translate(text: str) -> str:
     try:
         return translator.translate(text)
@@ -81,23 +107,26 @@ def translate(text: str) -> str:
         return text
 
 
-def send_to_discord(original: str, translated: str, link: str):
-    payload = {
-        "embeds": [{
-            "author": {
-                "name": f"@{TARGET_USERNAME}",
-                "url": f"https://x.com/{TARGET_USERNAME}",
-            },
-            "color": 0x1D9BF0,
-            "fields": [
-                {"name": "原文",     "value": original[:1024],   "inline": False},
-                {"name": "繁體中文", "value": translated[:1024],  "inline": False},
-            ],
-            "footer":    {"text": "X → Discord Bot"},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "url":       link,
-        }]
+def send_to_discord(original: str, translated: str, link: str, image_url: str | None = None):
+    embed = {
+        "author": {
+            "name": f"@{TARGET_USERNAME}",
+            "url": f"https://x.com/{TARGET_USERNAME}",
+        },
+        "title": "🔗 推文原文連結",
+        "url":   link,
+        "color": 0x1D9BF0,
+        "fields": [
+            {"name": "原文",     "value": original[:1024],   "inline": False},
+            {"name": "繁體中文", "value": translated[:1024],  "inline": False},
+        ],
+        "footer":    {"text": "X → Discord Bot"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    if image_url:
+        embed["image"] = {"url": image_url}
+
+    payload = {"embeds": [embed]}
     r = requests.post(DISCORD_WEBHOOK, json=payload, timeout=10)
     if r.status_code == 204:
         print(f"  ✓ 已發送: {link}")
@@ -136,7 +165,8 @@ def main():
     for entry in reversed(new_entries):
         text       = strip_html(entry.summary)
         translated = translate(text)
-        send_to_discord(text, translated, entry.link)
+        image_url  = extract_image(entry)
+        send_to_discord(text, translated, entry.link, image_url)
         time.sleep(1)
 
     save_last_id(entries[0].id)
