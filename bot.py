@@ -45,6 +45,41 @@ RSS_SOURCES = [
 
 translator = GoogleTranslator(source="auto", target="zh-TW")
 
+# 載入自訂字典
+DICT_FILE = "dictionary.json"
+def load_dictionary() -> dict:
+    if os.path.exists(DICT_FILE):
+        with open(DICT_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+DICTIONARY = load_dictionary()
+
+
+def apply_dictionary(text: str) -> str:
+    """翻譯後套用自訂字典修正術語"""
+    for wrong, correct in DICTIONARY.items():
+        text = text.replace(wrong, correct)
+    return text
+
+
+def protect_terms(text: str) -> tuple[str, dict]:
+    """翻譯前將已知術語替換成佔位符，避免被亂翻"""
+    placeholders = {}
+    for i, (jp_term, zh_term) in enumerate(DICTIONARY.items()):
+        placeholder = f"__TERM{i}__"
+        if jp_term in text:
+            text = text.replace(jp_term, placeholder)
+            placeholders[placeholder] = zh_term
+    return text, placeholders
+
+
+def restore_terms(text: str, placeholders: dict) -> str:
+    """翻譯後還原佔位符為正確繁中術語"""
+    for placeholder, zh_term in placeholders.items():
+        text = text.replace(placeholder, zh_term)
+    return text
+
 
 def load_last_id() -> str | None:
     if os.path.exists(STATE_FILE):
@@ -101,7 +136,15 @@ def extract_image(entry) -> str | None:
 
 def translate(text: str) -> str:
     try:
-        return translator.translate(text)
+        # 1. 保護已知術語
+        protected, placeholders = protect_terms(text)
+        # 2. 翻譯
+        result = translator.translate(protected)
+        # 3. 還原術語
+        result = restore_terms(result, placeholders)
+        # 4. 套用字典修正殘留錯誤
+        result = apply_dictionary(result)
+        return result
     except Exception as e:
         print(f"[翻譯失敗] {e}")
         return text
