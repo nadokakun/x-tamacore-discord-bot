@@ -64,20 +64,34 @@ def apply_dictionary(text: str) -> str:
 
 
 def protect_terms(text: str) -> tuple[str, dict]:
-    """翻譯前將已知術語替換成佔位符，避免被亂翻"""
+    """翻譯前保護：① 所有 hashtag ② 字典術語"""
     placeholders = {}
-    for i, (jp_term, zh_term) in enumerate(DICTIONARY.items()):
-        placeholder = f"__TERM{i}__"
+    idx = 0
+
+    # ① 保護所有 hashtag（#全形＃ 開頭的詞）
+    hashtags = re.findall(r'[#＃]\S+', text)
+    for tag in hashtags:
+        placeholder = f"ZHT{idx}ZHT"
+        if tag not in placeholders.values():
+            text = text.replace(tag, placeholder, 1)
+            placeholders[placeholder] = tag
+            idx += 1
+
+    # ② 保護字典術語
+    for jp_term, zh_term in DICTIONARY.items():
         if jp_term in text:
+            placeholder = f"ZTM{idx}ZTM"
             text = text.replace(jp_term, placeholder)
             placeholders[placeholder] = zh_term
+            idx += 1
+
     return text, placeholders
 
 
 def restore_terms(text: str, placeholders: dict) -> str:
-    """翻譯後還原佔位符為正確繁中術語"""
-    for placeholder, zh_term in placeholders.items():
-        text = text.replace(placeholder, zh_term)
+    """翻譯後還原所有佔位符"""
+    for placeholder, original in placeholders.items():
+        text = text.replace(placeholder, original)
     return text
 
 
@@ -136,7 +150,7 @@ def extract_image(entry) -> str | None:
 
 def translate(text: str) -> str:
     try:
-        # 1. 保護已知術語
+        # 1. 保護 hashtag 和字典術語
         protected, placeholders = protect_terms(text)
         # 2. 翻譯
         result = translator.translate(protected)
